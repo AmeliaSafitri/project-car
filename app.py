@@ -50,7 +50,7 @@ st.markdown("---")
 # -------------------------------------------------------
 # TAMPILKAN DATA UJI (sesuai permintaan)
 # -------------------------------------------------------
-st.subheader("📄 Data Uji (TEST) — Tidak Dihilangkan")
+st.subheader("📄 Data Uji (TEST)")
 st.dataframe(df_test.head())
 
 st.markdown("---")
