@@ -36,7 +36,8 @@ st.metric("Akurasi Data Uji", f"{accuracy:.2f}%")
 
 # Confusion report
 report = pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)).transpose()
-st.dataframe(report.style.background_gradient(cmap="Blues"))
+st.dataframe(report)
+
 
 # -------------------------------
 # Data Test Head
@@ -88,4 +89,4 @@ if start <= end:
 # -------------------------------
 st.header("3️⃣ Detail Data Sampel")
 with st.expander("Klik untuk melihat detail"):
-    st.dataframe(pd.DataFrame(selected).T.style.background_gradient(cmap="viridis"))
+    st.dataframe(pd.DataFrame(selected).T) 
