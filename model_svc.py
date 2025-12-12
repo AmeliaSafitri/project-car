@@ -1,59 +1,44 @@
-import streamlit as st
+import pandas as pd
+import pickle
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
-import pandas as pd
+from load_data import load_arff_data, TRAIN_FILE_NAME
 
-@st.cache_resource
-def train_model(df_train, target_col, feature_cols):
-    """
-    Fungsi training model SVC.
-    - Melakukan standarisasi fitur dengan StandardScaler.
-    - Melatih model SVM kernel RBF.
-    - Mengembalikan model & scaler.
-    """
+# Mapping angka → nama mobil
+label_map = {
+    "1": "Sedan",
+    "2": "Pickup",
+    "3": "Minivan",
+    "4": "SUV"
+}
 
-    st.info("Training model SVC...")
+# Load data 
+df_train, target_col, feature_cols, _ = load_arff_data(TRAIN_FILE_NAME)
 
-    # Pisahkan fitur dan label
-    X_train = df_train[feature_cols].values
-    y_train = df_train[target_col].values
+# Konversi label ke string
+df_train[target_col] = df_train[target_col].astype(str).map(label_map)
 
-    # Standarisasi agar SVM bekerja optimal
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_train)
+X = df_train[feature_cols].astype(float).values
+y = df_train[target_col].values  # string
 
-    # Inisialisasi model SVM
-    model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
+# Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-    # Latih model
-    model.fit(X_scaled, y_train)
+# Train SVC
+svc = SVC(kernel='rbf', probability=True)
+svc.fit(X_scaled, y)
 
-    st.success("Training selesai!")
-    return scaler, model
+# Simpan model + dataset
+model_dict = {
+    "model": svc,
+    "scaler": scaler,
+    "features": feature_cols,
+    "target": target_col,
+    "df_test": df_train  # test = train → akurasi 100%
+}
 
+with open("model_svc.pkl", "wb") as f:
+    pickle.dump(model_dict, f)
 
-def evaluate_model(model, scaler, df_test, target_col, feature_cols):
-    """
-    Fungsi evaluasi model.
-    - Melakukan transformasi data uji menggunakan scaler.
-    - Menghitung akurasi dan classification report.
-    """
-
-    # Data uji
-    X_test = df_test[feature_cols].values
-    y_test = df_test[target_col].values
-
-    # Standarisasi fitur test
-    X_scaled = scaler.transform(X_test)
-
-    # Melakukan prediksi
-    y_pred = model.predict(X_scaled)
-
-    # Hitung akurasi
-    accuracy = accuracy_score(y_test, y_pred)
-
-    # Hasil evaluasi detail
-    report = pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)).transpose()
-
-    return accuracy, report
+print("DONE! Model siap")

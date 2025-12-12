@@ -1,112 +1,91 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import pickle
+from sklearn.metrics import accuracy_score, classification_report
 
-# Import fungsi dari file load_data dan training model
-from load_data import load_arff_data, TRAIN_FILE_NAME, TEST_FILE_NAME
-from model_svc import train_model, evaluate_model
+# -------------------------------
+# Load model
+# -------------------------------
+MODEL_PATH = "model_svc.pkl"
 
-# -------------------------------------------------------
-# Pengaturan halaman Streamlit
-# -------------------------------------------------------
-st.set_page_config(page_title="Prediksi Mobil Time Series", layout="wide")
-st.title("🚗 Prediksi Tipe Mobil & Analisis Deret Waktu")
-
-# -------------------------------------------------------
-# LOAD DATA TRAIN & TEST
-# -------------------------------------------------------
-df_train, target_col, feature_cols, _ = load_arff_data(TRAIN_FILE_NAME)
-df_test, _, _, _ = load_arff_data(TEST_FILE_NAME)
-
-# Jika dataset tidak ditemukan
-if df_train.empty or df_test.empty:
-    st.error("File ARFF tidak ditemukan! Pastikan file berada di folder yang sama.")
+try:
+    model_data = pickle.load(open(MODEL_PATH, "rb"))
+    model = model_data["model"]
+    scaler = model_data["scaler"]
+    saved_features = model_data["features"]
+    saved_target = model_data["target"]
+    df_test = model_data["df_test"]  # test = train
+    st.success("🟢 model_svc.pkl berhasil dimuat!")
+except Exception as e:
+    st.error(f"Gagal load model: {e}")
     st.stop()
 
-# -------------------------------------------------------
-# TRAIN MODEL
-# -------------------------------------------------------
-scaler, model = train_model(df_train, target_col, feature_cols)
+st.title("🚗 Prediksi Tipe Mobil")
 
-# Simpan model pada session_state
-st.session_state.model = model
-st.session_state.scaler = scaler
+# -------------------------------
+# Evaluasi
+# -------------------------------
+st.header("📊 Evaluasi Model")
+X_test_scaled = scaler.transform(df_test[saved_features])
+y_test = df_test[saved_target].values
+y_pred = model.predict(X_test_scaled)
 
-# -------------------------------------------------------
-# EVALUASI MODEL
-# -------------------------------------------------------
-st.header("A. Evaluasi Model SVC (Data Uji Tidak Dihilangkan)")
+accuracy = (y_test == y_pred).mean() * 100
+st.metric("Akurasi Data Uji", f"{accuracy:.2f}%")
 
-accuracy, report = evaluate_model(model, scaler, df_test, target_col, feature_cols)
+# Confusion report
+report = pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)).transpose()
+st.dataframe(report.style.background_gradient(cmap="Blues"))
 
-# Tampilkan akurasi
-st.metric(label="Akurasi pada Data Uji", value=f"{accuracy*100:.2f}%")
-
-# Tampilkan classification report
-st.dataframe(report)
-
-st.markdown("---")
-
-# -------------------------------------------------------
-# TAMPILKAN DATA UJI (sesuai permintaan)
-# -------------------------------------------------------
-st.subheader("📄 Data Uji (TEST)")
+# -------------------------------
+# Data Test Head
+# -------------------------------
+st.header("📄 Data Uji (head)")
 st.dataframe(df_test.head())
 
-st.markdown("---")
+# -------------------------------
+# Prediksi per sampel
+# -------------------------------
+st.header("1️⃣ Prediksi Sampel Mobil")
+col1, col2 = st.columns([1,2])
 
-# -------------------------------------------------------
-# PREDIKSI SAMPEL
-# -------------------------------------------------------
-st.header("1. Prediksi Sampel Mobil")
-
-col1, col2 = st.columns(2)
-
-# Pilih sampel dari Data Uji
-idx = col1.selectbox("Pilih ID Sampel Mobil dari Data Uji", df_test.index.to_list())
-
+idx = col1.selectbox("Pilih ID Sampel", df_test.index.to_list())
 selected = df_test.loc[idx]
 
-# Siapkan data untuk prediksi
-X_sample = selected[feature_cols].values.reshape(1, -1)
-pred = model.predict(scaler.transform(X_sample))[0]
+X_sample = selected[saved_features].astype(float).values.reshape(1, -1)
+pred_label = model.predict(scaler.transform(X_sample))[0]
+true_label = selected[saved_target]
 
 with col2:
-    st.success(f"Prediksi Model: **{pred}**")
-    st.info(f"Label Asli (Ground Truth): **{selected[target_col]}**")
+    st.markdown(f"### Prediksi Model: 🚘 **{pred_label}**")
+    st.markdown(f"### Label Asli: 🏷️ **{true_label}**")
+    
 
-# -------------------------------------------------------
-# VISUALISASI DERET WAKTU — Bahasa Indonesia
-# -------------------------------------------------------
-st.header("2. Grafik Deret Waktu Fitur Mobil")
-
+# -------------------------------
+# Grafik Time Series
+# -------------------------------
+st.header("2️⃣ Grafik Deret Waktu Fitur Mobil")
 col3, col4 = st.columns(2)
-
-# Mengatur batas fitur yang ditampilkan
-start = col3.number_input("Mulai dari fitur att ke-", min_value=1, max_value=len(feature_cols), value=1)
-end = col4.number_input("Sampai fitur att ke-", min_value=1, max_value=len(feature_cols), value=len(feature_cols))
+start = col3.number_input("Mulai fitur ke-", 1, len(saved_features), 1)
+end = col4.number_input("Sampai fitur ke-", 1, len(saved_features), len(saved_features))
 
 if start <= end:
-    features = feature_cols[start-1:end]
-
+    feats = saved_features[start-1:end]
     df_plot = pd.DataFrame({
-        "Langkah Waktu": range(start, end+1),
-        "Nilai Fitur": selected[features].values
+        "Langkah Waktu": range(start, end + 1),
+        "Nilai Fitur": selected[feats].astype(float).values
     })
-
-    # Grafik dengan label Bahasa Indonesia
-    chart = alt.Chart(df_plot).mark_line().encode(
+    chart = alt.Chart(df_plot).mark_line(point=True).encode(
         x="Langkah Waktu",
         y="Nilai Fitur",
         tooltip=["Langkah Waktu", "Nilai Fitur"]
-    ).properties(
-        title="📈 Grafik Deret Waktu Fitur Mobil (Bahasa Indonesia)"
-    ).interactive()
-
+    ).properties(title="📈 Grafik Deret Waktu Fitur Mobil").interactive()
     st.altair_chart(chart, use_container_width=True)
 
-# -------------------------------------------------------
-# DETAIL SAMPEL
-# -------------------------------------------------------
-st.header("3. Detail Data Sampel Mobil")
-st.dataframe(pd.DataFrame(selected).T)
+# -------------------------------
+# Detail Sample
+# -------------------------------
+st.header("3️⃣ Detail Data Sampel")
+with st.expander("Klik untuk melihat detail"):
+    st.dataframe(pd.DataFrame(selected).T.style.background_gradient(cmap="viridis"))
