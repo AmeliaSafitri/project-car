@@ -104,7 +104,7 @@ if start <= end:
         title="📈 Grafik Deret Waktu Fitur Mobil"
     ).interactive()
     
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 # -------------------------------
 # DETAIL DATA SAMPEL
